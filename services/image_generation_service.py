@@ -10,7 +10,7 @@ class SDXLImageGenerationService:
     Dedicated service for generating images using Stable Diffusion XL
     """
     def __init__(self, 
-                 model_id: str = "stabilityai/stable-diffusion-xl-base-1.0",
+                 model_id: str = "cagliostrolab/animagine-xl-3.1",
                  device: Optional[str] = None):
         """
         Initialize the SDXL image generation service.
@@ -27,7 +27,8 @@ class SDXLImageGenerationService:
         # Load the SDXL pipeline
         self.pipeline = StableDiffusionXLPipeline.from_pretrained(
             model_id, 
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
+            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+            use_safetensors=True
         )
         
         # Move pipeline to specified device
