@@ -10,7 +10,7 @@ class SDXLImageGenerationService:
     Dedicated service for generating images using Stable Diffusion XL
     """
     def __init__(self, 
-                 model_id: str = "cagliostrolab/animagine-xl-3.1",
+                 model_id: str,
                  device: Optional[str] = None):
         """
         Initialize the SDXL image generation service.
@@ -37,11 +37,11 @@ class SDXLImageGenerationService:
     def generate_image(
         self, 
         prompt: str, 
-        negative_prompt: str = "",
-        num_inference_steps: int = 28,
-        guidance_scale: float = 7,
-        height: int = 1216,
-        width: int = 832
+        negative_prompt: str = "lowres, (bad), text, error, fewer, extra, missing, worst quality, jpeg artifacts, low quality, watermark, unfinished, displeasing, oldest, early, chromatic aberration, signature, extra digits, artistic error, username, scan, [abstract]",
+        num_inference_steps: int = 0,
+        guidance_scale: float = 0,
+        height: int = 0,
+        width: int = 0
     ) -> Image.Image:
         """
         Generate an image from a text prompt.
@@ -88,7 +88,7 @@ class SDXLImageGenerationService:
             os.makedirs('generated_images', exist_ok=True)
             output_path = os.path.join(
                 'generated_images', 
-                f'generated_image_{len(os.listdir("generated_images")) + 1}.png'
+                f'generated_image_{len(os.listdir("generated_images")) + 1}.jpg'
             )
         
         # Ensure directory exists
@@ -106,5 +106,5 @@ class SDXLImageGenerationService:
         :return: Image as bytes
         """
         byte_stream = io.BytesIO()
-        image.save(byte_stream, format='PNG')
+        image.save(byte_stream, format='JPEG')
         return byte_stream.getvalue()

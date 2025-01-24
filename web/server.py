@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 class GenerationRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=1000, 
                         description="Text prompt for image generation")
+    model_id: str = "cagliostrolab/animagine-xl-3.1",
     negative_prompt: str = Field(default="lowres, (bad), text, error, fewer, extra, missing, worst quality, jpeg artifacts, low quality, watermark, unfinished, displeasing, oldest, early, chromatic aberration, signature, extra digits, artistic error, username, scan, [abstract]", max_length=1000)
     num_inference_steps: int = Field(default=28, ge=1, le=200)
     guidance_scale: float = Field(default=7, ge=1.0, le=20.0)
@@ -25,7 +26,7 @@ class GenerationRequest(BaseModel):
 class ImageGenerationServer:
     def __init__(self, 
                  auth_key: Optional[str] = None,
-                 model_id: str = "cagliostrolab/animagine-xl-3.1"):
+                 model_id: str = ""):
         """
         Initialize the image generation server.
         
