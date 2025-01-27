@@ -1,5 +1,6 @@
 import os
 import io
+import gc
 import torch
 from typing import Optional
 from PIL import Image
@@ -10,20 +11,31 @@ class SDXLImageGenerationService:
     Dedicated service for generating images using Stable Diffusion XL
     """
     def __init__(self, 
-                 model_id: str,
-                 device: Optional[str] = None):
+                 model_id: str):
         """
         Initialize the SDXL image generation service.
         
         :param model_id: Hugging Face model ID for SDXL
-        :param device: Specific device to run the model (cuda/cpu)
         """
-        # Determine device
-        if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        else:
-            self.device = device
+        # Set MPS memory limits
+        os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.8"
+        os.environ["PYTORCH_MPS_LOW_WATERMARK_RATIO"] = "0.5"
         
+        self.setup_device(model_id)
+        
+    
+    def setup_device(self, model_id):
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        elif torch.backends.mps.is_available():
+            # Metal Performance Shaders (MPS) is available
+            try:
+                self.device = "mps"
+            except:
+                self.device = "cpu"
+        else:
+            self.device = "cpu"
+
         # Load the SDXL pipeline
         self.pipeline = StableDiffusionXLPipeline.from_pretrained(
             model_id, 
@@ -33,6 +45,13 @@ class SDXLImageGenerationService:
         
         # Move pipeline to specified device
         self.pipeline = self.pipeline.to(self.device)
+        
+    
+    def clear_memory(self):
+        if self.device == "mps":
+            torch.mps.empty_cache()
+            gc.collect()
+    
     
     def generate_image(
         self, 
@@ -55,6 +74,9 @@ class SDXLImageGenerationService:
         :return: Generated PIL Image
         """
         try:
+            # Clear memory before generation
+            self.clear_memory()
+            
             # Generate image with specified parameters
             generated_images = self.pipeline(
                 prompt=prompt,
@@ -65,11 +87,15 @@ class SDXLImageGenerationService:
                 width=width
             ).images
             
+            # Clear memory after generation
+            self.clear_memory()
+
             # Return the first generated image
             return generated_images[0]
         
         except Exception as e:
             raise RuntimeError(f"Image generation failed: {str(e)}")
+
     
     def save_image(
         self, 
