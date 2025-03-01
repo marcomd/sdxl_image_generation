@@ -5,13 +5,16 @@ import torch
 from typing import Optional
 from PIL import Image
 from diffusers import StableDiffusionXLPipeline
+import logging
 
 class SDXLImageGenerationService:
     """
     Dedicated service for generating images using Stable Diffusion XL
     """
     def __init__(self, 
-                 model_id: str):
+                 model_id: str,
+                 logger: Optional[logging.Logger] = None
+                ):
         """
         Initialize the SDXL image generation service.
         
@@ -22,6 +25,7 @@ class SDXLImageGenerationService:
         os.environ["PYTORCH_MPS_LOW_WATERMARK_RATIO"] = "0.5"
         
         self.setup_device(model_id)
+        self.logger = logger
         
     
     def setup_device(self, model_id):
@@ -39,7 +43,7 @@ class SDXLImageGenerationService:
         # Load the SDXL pipeline
         self.pipeline = StableDiffusionXLPipeline.from_pretrained(
             model_id, 
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+            torch_dtype=torch.float16 if self.device == "cuda" else torch.bfloat16,
             use_safetensors=True
         )
         
@@ -52,15 +56,19 @@ class SDXLImageGenerationService:
             torch.mps.empty_cache()
             gc.collect()
     
-    
+    def debug_memory(self):
+        if self.logger is None: return
+        
+        self.logger.info(f" Memory usage: {torch.cuda.memory_allocated(self.device) / 1024**3:.2f} GB")
+
     def generate_image(
-        self, 
-        prompt: str, 
-        negative_prompt: str = "lowres, (bad), text, error, fewer, extra, missing, worst quality, jpeg artifacts, low quality, watermark, unfinished, displeasing, oldest, early, chromatic aberration, signature, extra digits, artistic error, username, scan, [abstract]",
-        num_inference_steps: int = 0,
-        guidance_scale: float = 0,
-        height: int = 0,
-        width: int = 0
+        self,
+        prompt: str,
+        negative_prompt: str,
+        num_inference_steps: int,
+        guidance_scale: float,
+        height: int = 512,
+        width: int = 512
     ) -> Image.Image:
         """
         Generate an image from a text prompt.
@@ -77,6 +85,9 @@ class SDXLImageGenerationService:
             # Clear memory before generation
             self.clear_memory()
             
+            # Debug memory usage
+            self.debug_memory()
+
             # Generate image with specified parameters
             generated_images = self.pipeline(
                 prompt=prompt,
@@ -86,6 +97,8 @@ class SDXLImageGenerationService:
                 height=height,
                 width=width
             ).images
+
+            self.debug_memory()
             
             # Clear memory after generation
             self.clear_memory()
@@ -94,35 +107,7 @@ class SDXLImageGenerationService:
             return generated_images[0]
         
         except Exception as e:
-            raise RuntimeError(f"Image generation failed: {str(e)}")
-
-    
-    def save_image(
-        self, 
-        image: Image.Image, 
-        output_path: Optional[str] = None
-    ) -> str:
-        """
-        Save the generated image.
-        
-        :param image: PIL Image to save
-        :param output_path: Custom output path (optional)
-        :return: Path where image was saved
-        """
-        # If no path provided, generate a unique filename
-        if output_path is None:
-            os.makedirs('generated_images', exist_ok=True)
-            output_path = os.path.join(
-                'generated_images', 
-                f'generated_image_{len(os.listdir("generated_images")) + 1}.jpg'
-            )
-        
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
-        # Save image
-        image.save(output_path)
-        return output_path
+            raise RuntimeError(f"Image generation failed with prompt '{prompt}', num_inference_steps {num_inference_steps}, guidance_scale {guidance_scale}, height {height}, width {width}: {str(e)}")
     
 
     def image_to_bytes(self, image: Image.Image) -> bytes:

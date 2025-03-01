@@ -10,8 +10,7 @@ def main():
     
     # Create and run the server
     server = ImageGenerationServer(
-        auth_key=auth_key,
-        model_id=model_id
+        auth_key=auth_key
     )
     
     # Start the server

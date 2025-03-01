@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from services.image_generation_service import SDXLImageGenerationService
+from services.model_settings import get_model_settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -16,13 +17,10 @@ logger = logging.getLogger(__name__)
 class GenerationRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=1000, 
                         description="Text prompt for image generation")
-    model_id: str = Field(
-        default="cagliostrolab/animagine-xl-3.1",
-        description="Hugging Face model ID for SDXL"
+    model_type: str = Field(
+        default="anime",
+        description="Type of model to use (e.g. 'anime', 'real', 'turbo')"
     )
-    negative_prompt: str = Field(default="lowres, (bad), text, error, fewer, extra, missing, worst quality, jpeg artifacts, low quality, watermark, unfinished, displeasing, oldest, early, chromatic aberration, signature, extra digits, artistic error, username, scan, [abstract]", max_length=1000)
-    num_inference_steps: int = Field(default=28, ge=1, le=200)
-    guidance_scale: float = Field(default=6, ge=1.0, le=20.0)
     height: int = Field(default=1216, ge=256, le=2048)
     width: int = Field(default=832, ge=256, le=2048)
 
@@ -34,7 +32,7 @@ class ImageGenerationServer:
         
         :param auth_key: Static authentication key for endpoint security
         """
-        self.auth_key = auth_key or os.getenv("GENERATION_AUTH_KEY", "default_secret_key")
+        self.auth_key = auth_key
         
         # Initialize model cache
         self.model_cache = {}
@@ -55,7 +53,10 @@ class ImageGenerationServer:
         
         self.setup_routes()
     
-    def get_model_service(self, model_id: str) -> SDXLImageGenerationService:
+    def get_model_service(self, 
+                          model_id: str, 
+                          logger: Optional[logging.Logger] = None
+                        ) -> SDXLImageGenerationService:
         """
         Get or create an image generation service for the specified model.
         
@@ -63,7 +64,7 @@ class ImageGenerationServer:
         :return: Image generation service instance
         """
         if model_id not in self.model_cache:
-            self.model_cache[model_id] = SDXLImageGenerationService(model_id)
+            self.model_cache[model_id] = SDXLImageGenerationService(model_id, logger)
         
         return self.model_cache[model_id]
 
@@ -75,23 +76,33 @@ class ImageGenerationServer:
             authorization: str = Header(None)
         ):
             # Log incoming request details
-            logger.info(f"Received generation request: {request}")
+            logger.info(f" Received generation request: {request}")
             
             # Check authorization
             if authorization != self.auth_key:
-                logger.warning(f"Unauthorized access attempt with key: {authorization}")
+                logger.warning(f" Unauthorized access attempt with key: {authorization}")
                 raise HTTPException(status_code=403, detail="Unauthorized")
             
             try:
+                # Get model settings
+                try:
+                    settings = get_model_settings(request.model_type)
+                except KeyError as e:
+                    raise HTTPException(status_code=400, detail=str(e))
+
+                # Debug
+                logger.info(f" Generating image with settings: {settings}")
+
                 # Get the appropriate model service
-                model_service = self.get_model_service(request.model_id)
+                model_service = self.get_model_service(model_id=settings["model_id"], 
+                                                       logger=logger)
 
                 # Generate image using the service
                 image = model_service.generate_image(
                     prompt=request.prompt,
-                    negative_prompt=request.negative_prompt,
-                    num_inference_steps=request.num_inference_steps,
-                    guidance_scale=request.guidance_scale,
+                    negative_prompt=settings["negative_prompt"],
+                    num_inference_steps=settings["num_inference_steps"],
+                    guidance_scale=settings["guidance_scale"],
                     height=request.height,
                     width=request.width
                 )
@@ -99,14 +110,14 @@ class ImageGenerationServer:
                 # Convert image to bytes for streaming
                 image_bytes = model_service.image_to_bytes(image)
                 
-                logger.info("Image generation successful")
+                logger.info(" Image generation successful")
                 return StreamingResponse(
                     io.BytesIO(image_bytes), 
                     media_type="image/png"
                 )
             
             except Exception as e:
-                logger.error(f"Image generation failed: {str(e)}")
+                logger.error(f" Image generation failed: {str(e)}")
                 raise HTTPException(
                     status_code=500, 
                     detail=f"Image generation failed: {str(e)}"
