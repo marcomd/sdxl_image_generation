@@ -16,27 +16,28 @@ logger = logging.getLogger(__name__)
 class GenerationRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=1000, 
                         description="Text prompt for image generation")
-    model_id: str = "cagliostrolab/animagine-xl-3.1",
+    model_id: str = Field(
+        default="cagliostrolab/animagine-xl-3.1",
+        description="Hugging Face model ID for SDXL"
+    )
     negative_prompt: str = Field(default="lowres, (bad), text, error, fewer, extra, missing, worst quality, jpeg artifacts, low quality, watermark, unfinished, displeasing, oldest, early, chromatic aberration, signature, extra digits, artistic error, username, scan, [abstract]", max_length=1000)
     num_inference_steps: int = Field(default=28, ge=1, le=200)
-    guidance_scale: float = Field(default=7, ge=1.0, le=20.0)
+    guidance_scale: float = Field(default=6, ge=1.0, le=20.0)
     height: int = Field(default=1216, ge=256, le=2048)
     width: int = Field(default=832, ge=256, le=2048)
 
 class ImageGenerationServer:
     def __init__(self, 
-                 auth_key: Optional[str] = None,
-                 model_id: str = ""):
+                 auth_key: Optional[str] = None):
         """
         Initialize the image generation server.
         
         :param auth_key: Static authentication key for endpoint security
-        :param model_id: Hugging Face model ID for SDXL
         """
         self.auth_key = auth_key or os.getenv("GENERATION_AUTH_KEY", "default_secret_key")
         
-        # Create image generation service
-        self.image_service = SDXLImageGenerationService(model_id)
+        # Initialize model cache
+        self.model_cache = {}
         
         # Create FastAPI app
         self.app = FastAPI(title="SDXL Image Generation Server")
@@ -54,6 +55,18 @@ class ImageGenerationServer:
         
         self.setup_routes()
     
+    def get_model_service(self, model_id: str) -> SDXLImageGenerationService:
+        """
+        Get or create an image generation service for the specified model.
+        
+        :param model_id: Hugging Face model ID
+        :return: Image generation service instance
+        """
+        if model_id not in self.model_cache:
+            self.model_cache[model_id] = SDXLImageGenerationService(model_id)
+        
+        return self.model_cache[model_id]
+
     def setup_routes(self):
         """Set up API routes for image generation."""
         @self.app.post("/generate")
@@ -70,8 +83,11 @@ class ImageGenerationServer:
                 raise HTTPException(status_code=403, detail="Unauthorized")
             
             try:
+                # Get the appropriate model service
+                model_service = self.get_model_service(request.model_id)
+
                 # Generate image using the service
-                image = self.image_service.generate_image(
+                image = model_service.generate_image(
                     prompt=request.prompt,
                     negative_prompt=request.negative_prompt,
                     num_inference_steps=request.num_inference_steps,
@@ -81,7 +97,7 @@ class ImageGenerationServer:
                 )
                 
                 # Convert image to bytes for streaming
-                image_bytes = self.image_service.image_to_bytes(image)
+                image_bytes = model_service.image_to_bytes(image)
                 
                 logger.info("Image generation successful")
                 return StreamingResponse(

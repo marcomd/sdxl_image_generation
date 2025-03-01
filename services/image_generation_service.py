@@ -124,6 +124,7 @@ class SDXLImageGenerationService:
         image.save(output_path)
         return output_path
     
+
     def image_to_bytes(self, image: Image.Image) -> bytes:
         """
         Convert image to bytes for streaming.
