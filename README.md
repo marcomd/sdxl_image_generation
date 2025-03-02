@@ -58,4 +58,13 @@ On the client, make the call by passing the authentication key
 curl -X POST http://localhost:8000/generate -H "Authorization: wiv83hveivd83vk83" -H "Content-Type: application/json" -d '{"prompt": "A serene mountain landscape at sunset", "model_type": "anime", "height": 512, "width": 512}' -o landscape.jpg
 ```
 
-where localhost is the address on which you run the webserver
+localhost is the address where you run the webserver. If it is running on another computer replace it with the IP.
+
+Open landscape.jpg to check the result.
+
+### Model type
+
+Supported values are:
+
+- `sdxl-anime` the model used is cagliostrolab/animagine-xl-4.0
+- `sdxl-turbo` the model used is stabilityai/sdxl-turbo

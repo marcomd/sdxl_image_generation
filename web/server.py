@@ -34,8 +34,9 @@ class ImageGenerationServer:
         """
         self.auth_key = auth_key
         
-        # Initialize model cache
-        self.model_cache = {}
+        # Initialize single model cache
+        self.current_model_id = None
+        self.current_generation_service = None
         
         # Create FastAPI app
         self.app = FastAPI(title="SDXL Image Generation Server")
@@ -63,10 +64,17 @@ class ImageGenerationServer:
         :param model_id: Hugging Face model ID
         :return: Image generation service instance
         """
-        if model_id not in self.model_cache:
-            self.model_cache[model_id] = SDXLImageGenerationService(model_id, logger)
         
-        return self.model_cache[model_id]
+        # Clear the current model from memory if it is different
+        if self.current_model_id != model_id:
+            if self.current_generation_service is not None:
+                self.current_generation_service.clear_memory()
+            
+            self.current_generation_service = SDXLImageGenerationService(model_id=model_id, logger=logger)
+            self.current_model_id = model_id
+            
+        
+        return self.current_generation_service
 
     def setup_routes(self):
         """Set up API routes for image generation."""

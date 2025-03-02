@@ -24,11 +24,12 @@ class SDXLImageGenerationService:
         os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.8"
         os.environ["PYTORCH_MPS_LOW_WATERMARK_RATIO"] = "0.5"
         
-        self.setup_device(model_id)
+        self.model_id = model_id
+        self.setup_device()
         self.logger = logger
         
     
-    def setup_device(self, model_id):
+    def setup_device(self):
         if torch.cuda.is_available():
             self.device = "cuda"
         elif torch.backends.mps.is_available():
@@ -42,7 +43,7 @@ class SDXLImageGenerationService:
 
         # Load the SDXL pipeline
         self.pipeline = StableDiffusionXLPipeline.from_pretrained(
-            model_id, 
+            self.model_id, 
             torch_dtype=torch.float16 if self.device == "cuda" else torch.bfloat16,
             use_safetensors=True
         )
@@ -52,9 +53,15 @@ class SDXLImageGenerationService:
         
     
     def clear_memory(self):
+        self.logger.info(f"Clearing memory on '{self.device}', model: {self.model_id}")
+
         if self.device == "mps":
             torch.mps.empty_cache()
-            gc.collect()
+        elif self.device == "cuda":
+            torch.cuda.empty_cache()
+        
+        gc.collect()
+
     
     def debug_memory(self):
         if self.logger is None: return
@@ -82,9 +89,6 @@ class SDXLImageGenerationService:
         :return: Generated PIL Image
         """
         try:
-            # Clear memory before generation
-            self.clear_memory()
-            
             # Debug memory usage
             self.debug_memory()
 
@@ -98,14 +102,11 @@ class SDXLImageGenerationService:
                 width=width
             ).images
 
+            # Debug memory usage
             self.debug_memory()
-            
-            # Clear memory after generation
-            self.clear_memory()
 
             # Return the first generated image
             return generated_images[0]
-        
         except Exception as e:
             raise RuntimeError(f"Image generation failed with prompt '{prompt}', num_inference_steps {num_inference_steps}, guidance_scale {guidance_scale}, height {height}, width {width}: {str(e)}")
     
