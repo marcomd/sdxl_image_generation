@@ -30,4 +30,5 @@ def get_model_settings(model_type: str) -> Dict[str, Any]:
     """
     if model_type not in MODEL_SETTINGS:
         raise KeyError(f"Unknown model type: {model_type}. Available types: {list(MODEL_SETTINGS.keys())}")
+    
     return MODEL_SETTINGS[model_type]

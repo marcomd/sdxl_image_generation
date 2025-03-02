@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from services.image_generation_service import SDXLImageGenerationService
-from services.model_settings import get_model_settings
+from config.model_settings import get_model_settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
